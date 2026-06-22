@@ -1,0 +1,34 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("❌ DATABASE_URL manquant dans .env")
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,  # teste la connexion avant chaque requête
+    pool_size=5,
+    max_overflow=10
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    """
+    Générateur de session DB.
+    FastAPI l'appelle avant chaque route, et ferme
+    proprement même si une exception se produit.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
