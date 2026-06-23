@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -6,9 +6,35 @@ from database import get_db
 from models import User, Listing, Review
 from schemas import UserPublic, UserUpdate, ReviewCreate, ListingPublic
 from dependencies import get_current_user
+from services.cloudinary_service import upload_avatar
 
 router = APIRouter()
 
+ALLOWED_AVATAR_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_AVATAR_SIZE      = 5 * 1024 * 1024  # 5 Mo
+
+@router.post("/me/avatar", response_model=UserPublic, summary="Changer ma photo de profil")
+async def update_avatar(
+    file:         UploadFile = File(...),
+    db:           Session    = Depends(get_db),
+    current_user: User       = Depends(get_current_user)
+):
+    if file.content_type not in ALLOWED_AVATAR_TYPES:
+        raise HTTPException(400, f"Format non supporté : {file.content_type}")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_AVATAR_SIZE:
+        raise HTTPException(400, "L'avatar ne doit pas dépasser 5 Mo")
+
+    try:
+        url = upload_avatar(file_bytes, current_user.id)
+    except Exception as e:
+        raise HTTPException(500, f"Échec de l'upload : {str(e)}")
+
+    current_user.avatar_url = url
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 @router.get("/me", response_model=UserPublic, summary="Mon profil")
 def get_my_profile(current_user: User = Depends(get_current_user)):

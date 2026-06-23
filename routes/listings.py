@@ -16,8 +16,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ALLOWED_TYPES  = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
 MAX_PHOTO_SIZE = 10 * 1024 * 1024
-MAX_PHOTOS     = 5
+MAX_VIDEO_SIZE = 50 * 1024 * 1024
+MAX_FILES      = 20   # garde-fou technique, pas une limite commerciale
 
 
 @router.post("/", response_model=ListingPublic, summary="Publier une annonce")
@@ -35,7 +37,7 @@ async def create_listing(
     current_user: User    = Depends(get_current_user)
 ):
     if len(photos) > MAX_PHOTOS:
-        raise HTTPException(400, f"Maximum {MAX_PHOTOS} photos par annonce")
+        raise HTTPException(400, f"Maximum {MAX_FILES} photos par annonce")
 
     # ① Calcul et déduction DOB avant toute chose
     vid_count   = sum(1 for p in photos if p.content_type and 'video' in p.content_type)
