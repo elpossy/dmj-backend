@@ -52,10 +52,9 @@ def generate_otp() -> str:
 
 def send_otp(phone: str, code: str) -> bool:
     """
-    Appelé depuis la route /request-otp.
-    En mode réel : ne fait RIEN — le code sera envoyé
-    par le webhook quand l'utilisateur initie la conversation.
-    En mode mock : affiche dans la console.
+    Appelé depuis /request-otp.
+    Mock  → affiche le code dans la console + UI.
+    Réel  → envoie DIRECTEMENT le code par WhatsApp (Business-Initiated).
     """
     if _MOCK_MODE:
         print(f"\n{'='*45}")
@@ -65,10 +64,44 @@ def send_otp(phone: str, code: str) -> bool:
         print(f"{'='*45}\n")
         return True
 
-    # Mode réel : on ne fait rien ici.
-    # Le webhook enverra le code dès que l'utilisateur écrit.
-    logger.info(f"OTP en attente pour {phone} — attend le message WhatsApp")
-    return True
+    # Mode réel — envoi direct sans attendre le webhook
+    return _send_direct(phone, code)
+
+
+def _send_direct(phone: str, code: str) -> bool:
+    """
+    Envoie le code OTP directement à l'utilisateur
+    sans attendre qu'il envoie un message en premier.
+    Business-Initiated Message — Meta autorise ça pour l'auth.
+    """
+    phone_clean = phone.replace("+", "").replace(" ", "")
+
+    body = (
+        f"Voici ton code de vérification Damundjé 🔐\n\n"
+        f"*{code}*\n\n"
+        f"⏳ Valide pendant *15 minutes*.\n"
+        f"🔒 Ne le partage avec personne.\n\n"
+        f"Si tu n'as pas demandé ce code, ignore ce message."
+    )
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to":   phone_clean,
+        "type": "text",
+        "text": {"body": body}
+    }
+
+    try:
+        res = requests.post(API_URL, headers=HEADERS, json=payload, timeout=10)
+        if res.status_code == 200:
+            logger.info(f"✅ OTP envoyé directement à {phone}")
+            return True
+        else:
+            logger.error(f"WhatsApp API {res.status_code}: {res.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Erreur réseau WhatsApp: {e}")
+        return False
 
 
 def send_otp_reply(phone: str, code: str, user_name: str = None) -> bool:
