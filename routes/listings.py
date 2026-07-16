@@ -72,15 +72,20 @@ async def create_listing(
         if not photo.filename:      # champ vide envoyé par le navigateur
             continue
 
-        if photo.content_type not in ALLOWED_TYPES:
+is_video = photo.content_type in ALLOWED_VIDEO_TYPES
+is_photo = photo.content_type in ALLOWED_TYPES
+
+if not is_photo and not is_video:
             raise HTTPException(400, f"Format non supporté : {photo.content_type}")
+
+        size_limit = MAX_VIDEO_SIZE if is_video else MAX_PHOTO_SIZE
 
         file_bytes = await photo.read()
 
         if len(file_bytes) == 0:    # fichier vide
             continue
 
-        if len(file_bytes) > MAX_PHOTO_SIZE:
+        if len(file_bytes) > size_limit:
             raise HTTPException(400, f"Photo {index+1} trop lourde (max 10 Mo)")
 
         try:
@@ -176,8 +181,8 @@ async def update_listing(
     if valid_new:
         current_photos = list(listing.photos or [])
         for index, photo in enumerate(valid_new):
-            if photo.content_type not in ALLOWED_TYPES:
-                raise HTTPException(400, "Format de photo invalide")
+            if photo.content_type not in ALLOWED_TYPES | ALLOWED_VIDEO_TYPES:
+                raise HTTPException(400, "Format non supporté")
             file_bytes = await photo.read()
             url = upload_listing_photo(file_bytes, listing.id, len(current_photos) + index)
             current_photos.append(url)
