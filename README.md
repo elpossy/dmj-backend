@@ -4,11 +4,11 @@ Dépôt backend — contenu et documentation à compléter.
 
 ## Description
 
-Ce dépôt contient le code du backend du projet. Le README est volontairement minimal : ajoutez ici une description précise du projet, des choix technologiques, et des liens utiles.
+Ce dépôt contient le code du backend du projet Damundjé. Le README est volontairement minimal : ajoutez ici une description précise du projet, des choix technologiques, et des liens utiles.
 
 ## Prérequis
 
-- Installez les dépendances (par ex. Node.js >= 14, Python >= 3.8, ou autre selon votre stack).
+- Installez les dépendances dont Python >= 3.10, et les bibliothèques listé dans le fichier requirements.txt.
 - Configurez les variables d'environnement nécessaires (par ex. DATABASE_URL, PORT).
 
 ## Installation
@@ -21,11 +21,8 @@ Ce dépôt contient le code du backend du projet. Le README est volontairement m
    cd back_end
 3. Installez les dépendances :
 
-   # Exemple pour Node.js
-   npm install
-
-   # Exemple pour Python
-   pip install -r requirements.txt
+   # comment installer :
+   pour installer les dépendances, ayez sûr d'avoir python et pip deja installer puis dans le terminal, -> pip install -r requirements.txt
 
 ## Lancement
 
@@ -47,8 +44,6 @@ Ce dépôt contient le code du backend du projet. Le README est volontairement m
 
 ## Contribution
 
-Les contributions sont bienvenues. Ouvrez une issue ou une pull request et décrivez votre changement.
+aucune contribution, ce projet est privé 💨
 
 ## Licence
-
-Ajoutez la licence du projet ici (ex. MIT).
