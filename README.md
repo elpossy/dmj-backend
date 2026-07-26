@@ -28,11 +28,11 @@ Ce dépôt contient le code du backend du projet Damundjé. Le README est volont
 
 - Développement :
 
-  npm run dev
+  uvicorn main:app --reload
 
 - Production :
 
-  npm start
+  uvicorn main:app --host 0.0.0.0
 
 (Adaptez les commandes ci-dessus selon la stack réelle du projet.)
 
@@ -40,7 +40,7 @@ Ce dépôt contient le code du backend du projet Damundjé. Le README est volont
 
 - Exécutez les tests :
 
-  npm test
+  ...
 
 ## Contribution
 
