@@ -9,8 +9,8 @@ import os
 from database import get_db
 from models import User, OTPCode, Session as DBSession
 from schemas import PhoneRequest, OTPVerifyRequest, TokenResponse
-from services.whatsapp import send_otp, generate_otp
-
+#from services.whatsapp import send_otp, generate_otp
+from services.termii import send_otp, generate_otp, OTP_MODE as otp_mode
 router = APIRouter()
 
 OTP_EXPIRE_MINUTES = 15
@@ -26,7 +26,7 @@ def _check_code(plain: str, hashed: str) -> bool:
     return hmac.compare_digest(_hash_code(plain), hashed)
 
 
-@router.post("/request-otp", summary="Envoyer un code OTP sur WhatsApp")
+@router.post("/request-otp", summary="Envoyer un code OTP")
 def request_otp(payload: PhoneRequest, db: Session = Depends(get_db)):
     db.query(OTPCode).filter(
         OTPCode.phone == payload.phone,
@@ -49,16 +49,15 @@ def request_otp(payload: PhoneRequest, db: Session = Depends(get_db)):
 
     sent = send_otp(payload.phone, code)
     if not sent:
-        raise HTTPException(503, "Échec d'envoi WhatsApp")
-
-    from services.whatsapp import OTP_MODE as otp_mode
+        raise HTTPException(503, "Échec d'envoi du code")
+			
 
     result = {
         "message": f"Code envoyé ({OTP_EXPIRE_MINUTES} min)",
     }
 
     # Mode mock : retourne le code pour l'afficher dans l'UI
-    if otp_mode == "mock":
+    if otp_mode == "debug":
         result["dev_code"] = code  # ← visible dans l'UI pour développement
 
     # Mode WhatsApp : le code ne sera envoyé que via webhook

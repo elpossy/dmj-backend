@@ -10,7 +10,7 @@ from models import Listing, Favorite, User
 from schemas import ListingPublic
 from dependencies import get_current_user
 from services.cloudinary_service import upload_listing_photo, delete_photo
-from routes.dob import calculate_dob_cost, _debit_dob
+from routes.dob import calculate_dob_cost, _debit_dob, _credit_dob
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -36,19 +36,38 @@ async def create_listing(
     db:           Session = Depends(get_db),
     current_user: User    = Depends(get_current_user)
 ):
-    if len(photos) > MAX_PHOTOS:
+    if len(photos) > MAX_FILES:
         raise HTTPException(400, f"Maximum {MAX_FILES} photos par annonce")
 
-    # ① Calcul et déduction DOB avant toute chose
-    vid_count   = sum(1 for p in photos if p.content_type and 'video' in p.content_type)
-    pic_count   = len([p for p in photos if p.filename]) - vid_count
-    cost        = calculate_dob_cost(pic_count, vid_count)
-    _debit_dob(
-        db, current_user, cost["total"],
-        reason=f"listing_publish:base{cost['base']}+photo{cost['photo_extra']}+video{cost['video_cost']}"
-    )
+    # ① Valider TOUS les fichiers AVANT de créer l'annonce ou de toucher aux DOB
+    validated_files = []   # [(bytes, is_video, index)]
+    for index, photo in enumerate(photos):
+        if not photo.filename:
+            continue
 
-    # ② Crée l'annonce sans photos pour avoir l'ID
+        is_video = photo.content_type in ALLOWED_VIDEO_TYPES
+        is_photo = photo.content_type in ALLOWED_TYPES
+
+        if not is_photo and not is_video:
+            raise HTTPException(400, f"Format non supporté : {photo.content_type}")
+
+        size_limit = MAX_VIDEO_SIZE if is_video else MAX_PHOTO_SIZE
+        file_bytes = await photo.read()
+
+        if len(file_bytes) == 0:
+            continue
+
+        if len(file_bytes) > size_limit:
+            raise HTTPException(400, f"Photo {index+1} trop lourde (max 10 Mo)")
+
+        validated_files.append((file_bytes, is_video, index))
+
+    # ② Coût réel calculé sur les fichiers validés
+    vid_count = sum(1 for _, is_video, _ in validated_files if is_video)
+    pic_count = len(validated_files) - vid_count
+    cost = calculate_dob_cost(pic_count, vid_count)
+
+    # ③ Crée l'annonce en BROUILLON d'abord — aucun DOB engagé à ce stade
     listing = Listing(
         seller_id     = current_user.id,
         category_id   = category_id,
@@ -59,50 +78,49 @@ async def create_listing(
         is_negotiable = is_negotiable,
         condition     = condition,
         city          = city,
-        photos        = []
+        photos        = [],
+        status        = "draft"
     )
     db.add(listing)
     db.commit()
     db.refresh(listing)
 
-    # ② Upload photos sur Cloudinary
+    # ④ Débite les DOB — si solde insuffisant, exception levée AVANT tout débit,
+    #    l'annonce reste en brouillon, 0 DOB perdu.
+    _debit_dob(
+        db, current_user, cost["total"],
+        reason=f"listing_publish:base{cost['base']}+photo{cost['photo_extra']}+video{cost['video_cost']}",
+        listing_id=listing.id
+    )
+
+    # ⑤ Upload des photos — si ça échoue, on REMBOURSE et on garde le brouillon
     uploaded_urls = []
-    for index, photo in enumerate(photos):
-
-        if not photo.filename:      # champ vide envoyé par le navigateur
-            continue
-
-is_video = photo.content_type in ALLOWED_VIDEO_TYPES
-is_photo = photo.content_type in ALLOWED_TYPES
-
-if not is_photo and not is_video:
-            raise HTTPException(400, f"Format non supporté : {photo.content_type}")
-
-        size_limit = MAX_VIDEO_SIZE if is_video else MAX_PHOTO_SIZE
-
-        file_bytes = await photo.read()
-
-        if len(file_bytes) == 0:    # fichier vide
-            continue
-
-        if len(file_bytes) > size_limit:
-            raise HTTPException(400, f"Photo {index+1} trop lourde (max 10 Mo)")
-
-        try:
+    try:
+        for file_bytes, is_video, index in validated_files:
             url = upload_listing_photo(file_bytes, listing.id, index)
             uploaded_urls.append(url)
             logger.info(f"Photo {index} uploadée : {url}")
-        except Exception as e:
-            logger.error(f"Échec upload photo {index} : {e}")
-            raise HTTPException(500, f"Échec upload photo {index+1} : {str(e)}")
 
-    # ③ Sauvegarde les URLs — flag_modified obligatoire pour JSONB SQLAlchemy
-    listing.photos = uploaded_urls
-    flag_modified(listing, "photos")
-    db.commit()
-    db.refresh(listing)
+        listing.photos = uploaded_urls
+        listing.status = "active"
+        flag_modified(listing, "photos")
+        db.commit()
+        db.refresh(listing)
+        logger.info(f"Annonce {listing.id} publiée avec {len(uploaded_urls)} photo(s)")
 
-    logger.info(f"Annonce {listing.id} créée avec {len(uploaded_urls)} photo(s)")
+    except Exception as e:
+        logger.error(f"Échec upload photos annonce {listing.id} : {e}")
+        _credit_dob(
+            db, current_user, cost["total"],
+            reason=f"refund_upload_failed:listing_{listing.id}",
+            listing_id=listing.id
+        )
+        listing.photos = uploaded_urls   # garde celles déjà uploadées avant l'échec
+        flag_modified(listing, "photos")
+        db.commit()
+        db.refresh(listing)
+        # L'annonce reste "draft" — rien à recommencer, aucun DOB perdu
+
     return listing
 
 
