@@ -3,7 +3,7 @@ from sqlalchemy import (
     Numeric, SmallInteger, Integer,
     TIMESTAMP, ForeignKey
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.sql import func
 from database import Base
 
@@ -78,6 +78,7 @@ class Listing(Base):
     favorites_count = Column(Integer, default=0)
     created_at      = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at      = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    search_vector   = Column(TSVECTOR, nullable=True)  # généré par trigger Supabase
 
 
 class Favorite(Base):
